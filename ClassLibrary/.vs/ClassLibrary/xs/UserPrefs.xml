@@ -1,0 +1,28 @@
+﻿<Properties StartupConfiguration="{A7B9DB6C-E1DD-4406-AA1A-BD5C39E3C12D}|Default">
+  <MonoDevelop.Ide.Workbench ActiveDocument="testConsole/Program.cs">
+    <Files>
+      <File FileName="testConsole/Program.cs" Line="12" Column="1" />
+      <File FileName="ClassLibrary/ClassArcFace.cs" Line="8" Column="28" />
+    </Files>
+    <Pads>
+      <Pad Id="ProjectPad">
+        <State name="__root__">
+          <Node name="ClassLibrary" expanded="True">
+            <Node name="ClassLibrary" expanded="True" />
+            <Node name="testConsole" expanded="True" selected="True" />
+          </Node>
+        </State>
+      </Pad>
+      <Pad Id="MonoDevelop.Debugger.WatchPad">
+        <State />
+      </Pad>
+    </Pads>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.ItemProperties.testConsole PreferredExecutionTarget="MonoDevelop.Default" />
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MultiItemStartupConfigurations />
+</Properties>
