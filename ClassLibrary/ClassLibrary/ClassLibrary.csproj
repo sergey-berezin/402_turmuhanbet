@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <None Remove="arcfaceresnet100-8.onnx" />
+    <None Remove="arcfaceresnet100-8.onnx" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="**/*" />
