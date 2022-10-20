@@ -1,14 +1,7 @@
 ﻿<Properties StartupConfiguration="{A7B9DB6C-E1DD-4406-AA1A-BD5C39E3C12D}|Default">
-  <MonoDevelop.Ide.DebuggingService.Breakpoints>
-    <BreakpointStore />
-  </MonoDevelop.Ide.DebuggingService.Breakpoints>
-  <MonoDevelop.Ide.ItemProperties.testConsole PreferredExecutionTarget="MonoDevelop.Default" />
-  <MultiItemStartupConfigurations />
-  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
-  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
   <MonoDevelop.Ide.Workbench ActiveDocument="ClassLibrary/ClassArcFace.cs">
     <Files>
-      <File FileName="testConsole/Program.cs" Line="23" Column="15" />
+      <File FileName="testConsole/Program.cs" Line="60" Column="63" />
       <File FileName="ClassLibrary/ClassArcFace.cs" Line="23" Column="1" />
     </Files>
     <Pads>
@@ -25,4 +18,11 @@
       </Pad>
     </Pads>
   </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.ItemProperties.testConsole PreferredExecutionTarget="MonoDevelop.Default" />
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MultiItemStartupConfigurations />
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
 </Properties>
