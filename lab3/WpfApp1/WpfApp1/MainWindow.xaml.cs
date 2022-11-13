@@ -14,8 +14,12 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using ClassLibrary;      //подключили библиотеку классов из нашего пакета
+using ClassLibrary1;
 using System.Threading;
+using System.Collections;
+using System.IO;
+using System.Collections.ObjectModel;
+using Microsoft.EntityFrameworkCore;
 
 namespace WpfApp1
 {
@@ -25,29 +29,29 @@ namespace WpfApp1
     public partial class MainWindow : Window
     {
 
-        private List<string> list_images_path;
-        private List<Image<Rgb24>> list_images;
+        private List<Tuple<byte[], string>> images_bytes_path;
         private CancellationTokenSource cancelTokenSource;
         private CancellationToken token;
         private bool calculations_status;
-        private Dictionary<int, bool> completed_tasks;
+        private Dictionary<int, float[]> embeddingsDict;
+
         ClassArcFace obj1;
+
         public MainWindow()
         {
             InitializeComponent();
             cancelTokenSource = new CancellationTokenSource();
             token = cancelTokenSource.Token;
-            list_images_path = new List<string>();
-            list_images = new List<Image<Rgb24>>();
             obj1 = new ClassArcFace();
             calculations_status = false;
-            completed_tasks = new Dictionary<int, bool>();
+            images_bytes_path = new List<Tuple<byte[], string>>();
+            embeddingsDict = new Dictionary<int, float[]>();
         }
 
         //Метод загружает изображения с выбранного каталога и вызввает метод, который строит сетку
         private void Button_Open_Images(object sender, RoutedEventArgs e)
         {
-            Gride_Clear();
+            Grid_Clear();
             Microsoft.Win32.OpenFileDialog ofd = new Microsoft.Win32.OpenFileDialog();
             ofd.Multiselect = true;
             ofd.Filter = "Images (*.jpg, *.png)|*.jpg;*.png";
@@ -58,18 +62,16 @@ namespace WpfApp1
             {
                 foreach (var path in ofd.FileNames)
                 {
-                    var face = SixLabors.ImageSharp.Image.Load<Rgb24>(path);
-                    list_images.Add(face);
-                    list_images_path.Add(path);
+                    images_bytes_path.Add(Tuple.Create(System.IO.File.ReadAllBytes(path), path));
                 }
-            }         
+            }
             Grid_Construct();
         }
 
         //Метод строит сетку по каталогу изображений
         private void Grid_Construct()
         {
-            int n = list_images_path.Count;
+            int n = images_bytes_path.Count;
             for (int i = 0; i < n + 1; i++)
             {
                 table.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) });
@@ -77,13 +79,15 @@ namespace WpfApp1
 
                 if (i > 0)
                 {
-                    var uri = new System.Uri(list_images_path[i - 1]);
-                    var bitmap = new BitmapImage(uri);
+                    var image1 = new System.Windows.Controls.Image
+                    {
+                        Source = (BitmapSource)new ImageSourceConverter().ConvertFrom(images_bytes_path[i - 1].Item1)
+                    };
 
-                    var image1 = new System.Windows.Controls.Image();
-                    image1.Source = bitmap;
-                    var image2 = new System.Windows.Controls.Image();
-                    image2.Source = bitmap;
+                    var image2 = new System.Windows.Controls.Image
+                    {
+                        Source = (BitmapSource)new ImageSourceConverter().ConvertFrom(images_bytes_path[i - 1].Item1)
+                    };
 
                     Grid.SetColumn(image1, 0);
                     Grid.SetRow(image1, i);
@@ -97,16 +101,16 @@ namespace WpfApp1
         }
 
         //метод очищает сетку, массивы с изображениями, обновляет токены
-        public void Gride_Clear()
+        public void Grid_Clear()
         {
             calculations_status = false;
             cancelTokenSource = new CancellationTokenSource();
             token = cancelTokenSource.Token;
-            int size = list_images.Count;         
+            int size = images_bytes_path.Count;
             if (size == 0)
                 return;
             table.Children.Clear();
-            pbStatus.Value = 0;        
+            pbStatus.Value = 0;
             for (int i = 0; i < size + 1; i++)
             {
                 table.RowDefinitions.Clear();
@@ -115,15 +119,14 @@ namespace WpfApp1
             {
                 table.ColumnDefinitions.Clear();
             }
-            list_images_path.Clear();
-            list_images.Clear();
-            completed_tasks.Clear();
+            images_bytes_path.Clear();
         }
+
 
         //Метод начинает вычисления по заданным изображениям
         private async void Button_Start_Calculations(object sender, RoutedEventArgs e)
         {
-            if(list_images.Count == 0)
+            if (images_bytes_path.Count == 0)
             {
                 MessageBox.Show("Пожалуйста, выберите каталог с изображениями.");
                 return;
@@ -133,31 +136,74 @@ namespace WpfApp1
                 MessageBox.Show("Вычисления уже произведены. Пожлауйста, обновите матрицу.");
                 return;
             }
-            int step1 = 500 / list_images.Count;
-            int step2 = 500 / (list_images.Count * list_images.Count);
-            var tasks = new List<Task>();
-
-            for(int i = 0; i < list_images.Count; i++)
+            int step1 = 500 / images_bytes_path.Count;
+            int step2 = 500 / (images_bytes_path.Count * images_bytes_path.Count);
+            var tasks = new List<Task<float[]>>();
+            var image_task = new List<int>();
+            embeddingsDict.Clear();
+                     
+            for (int i = 0; i < images_bytes_path.Count; i++)
             {
                 try
                 {
-                    Task task1 = obj1.CalculateAllEmbeddingsAsync(list_images[i], token);                
-                    tasks.Add(task1);
+                    Image newImage = null;
+                    using (var db = new ImagesContext())   //По хэш-коду ищем изображение, если хэш-код совпадает, то дальше сверяем содержмое 
+                    {
+                        string hash = Image.GetHash(images_bytes_path[i].Item1);
+                        var q = db.Images.Where(x => x.Hash == hash)
+                            .Include(x => x.Details)
+                            .Where(x => Equals(x.Details.Data, images_bytes_path[i].Item1));
+                        if (q.Any())
+                        {
+                            newImage = q.First();
+                        }
+                    }
+                    if (newImage is not null)   //Если в базе данных уже есть данное изображение, то просто берем его
+                    {
+                        float[] embeddings = new float[newImage.Embedding.Length / 4];
+                        Buffer.BlockCopy(newImage.Embedding, 0, embeddings, 0, newImage.Embedding.Length);
+                        if (!embeddingsDict.ContainsKey(i))
+                        {
+                            embeddingsDict.Add(i, embeddings);
+                        }                    
+                    }
+                    else                        //Иначе вычисляем embeddings для данного изображения
+                    {
+                        var face = SixLabors.ImageSharp.Image.Load<Rgb24>(images_bytes_path[i].Item2);
+                        var task1 = obj1.CalculateAllEmbeddingsAsync(face, token);
+                        tasks.Add(task1);
+                        image_task.Add(i);  //image_task[i] показывает, что i-ый task обрабатывает image_task[i] изображение
+                    }
                 }
                 catch (OperationCanceledException e1)
                 {
                     Console.WriteLine($"{nameof(OperationCanceledException)} thrown with message: {e1.Message}");
                 }
             }
-            
-            for(int i = 0; i < tasks.Count; i++)
+
+            for (int i = 0; i < tasks.Count; i++)
             {
                 try
-                {
+                {                   
                     await tasks[i];
-                    if(completed_tasks.ContainsKey(i) == false)
-                        completed_tasks.Add(i, true);
-                    pbStatus.Value += step1;
+                    pbStatus.Value += step1;                   
+                    embeddingsDict.Add(image_task[i], tasks[i].Result);
+                    
+                    using (var db = new ImagesContext())           //Если tasks[i] успешно завершился, то записываем результат в базу данных
+                    {
+                        var newImageDetails = new ImageDetails { Data = images_bytes_path[image_task[i]].Item1 };
+                        var byteArray = new byte[tasks[i].Result.Length * 4];
+                        Buffer.BlockCopy(tasks[i].Result, 0, byteArray, 0, byteArray.Length);
+                        Image newImage = new Image
+                        {
+                            Name = images_bytes_path[image_task[i]].Item2,
+                            Embedding = byteArray,
+                            Details = newImageDetails,
+                            Hash = Image.GetHash(images_bytes_path[image_task[i]].Item1)
+                        };
+                        db.Add(newImage);
+                        db.SaveChanges();
+                    }                  
                 }
                 catch (OperationCanceledException e2)
                 {
@@ -165,9 +211,9 @@ namespace WpfApp1
                 }
             }
 
-            for (int i = 0; i < list_images.Count; i++)
+            for (int i = 0; i < images_bytes_path.Count; i++)
             {
-                for(int j = 0; j < list_images.Count; j++)
+                for (int j = 0; j < images_bytes_path.Count; j++)
                 {
                     var l = new Label();
                     Grid.SetColumn(l, i + 1);
@@ -175,14 +221,14 @@ namespace WpfApp1
                     l.HorizontalAlignment = HorizontalAlignment.Center;
                     l.VerticalAlignment = VerticalAlignment.Center;
                     l.FontSize = 12;
-                    if(completed_tasks.ContainsKey(i) == false || completed_tasks.ContainsKey(j) == false)
-                    {        
-                        l.Content = $"Distance: Not calculated\n Similarity: Not calculated";                                                      
+                    if (embeddingsDict.ContainsKey(i) == false || embeddingsDict.ContainsKey(j) == false)
+                    {
+                        l.Content = $"Distance: Not calculated\n Similarity: Not calculated";
                     }
                     else
                     {
-                        var res1 = obj1.CalculateDistanceSimilarity(list_images[i], list_images[j]);
-                        await res1;
+                        var res1 = obj1.CalculateDistanceSimilarity(embeddingsDict[i], embeddingsDict[j]);
+                        await res1;                       
                         l.Content = $"Distance: {res1.Result.Item1}\n Similarity: {res1.Result.Item2}";
                         pbStatus.Value += step2;
                     }
@@ -196,14 +242,22 @@ namespace WpfApp1
             calculations_status = true;
         }
 
+        //Метод очищает сетку
         private void Button_Grid_Clear(object sender, RoutedEventArgs e)
         {
-            if(list_images.Count == 0)
+            if (images_bytes_path.Count == 0)
             {
                 MessageBox.Show("Матрица уже очищена.");
                 return;
             }
-            Gride_Clear();
+            Grid_Clear();
+        }
+
+        //Метод открывает диалоговое окно с данными из базы данных
+        private void Button_Open_Database(object sender, RoutedEventArgs e)
+        {
+            WindowDatabase windowDatabase = new WindowDatabase();
+            windowDatabase.ShowDialog();
         }
 
         //Метод отменяет вычисления

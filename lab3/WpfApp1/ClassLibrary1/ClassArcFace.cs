@@ -1,30 +1,23 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using Microsoft.ML.OnnxRuntime;
+﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using System.Threading.Tasks.Dataflow;
 using System.Collections.Concurrent;
-namespace ClassLibrary
+namespace ClassLibrary1
 {
     public class ClassArcFace
     {
         private InferenceSession session;
-        public ConcurrentDictionary<Image<Rgb24>, float[]> embeddingsDict;
 
         public ClassArcFace()
         {
-            using var modelStream = typeof(ClassArcFace).Assembly.GetManifestResourceStream("ClassLibrary.arcfaceresnet100-8.onnx");
+            using var modelStream = typeof(ClassArcFace).Assembly.GetManifestResourceStream("ClassLibrary1.arcfaceresnet100-8.onnx");
             using var memoryStream = new MemoryStream();
             modelStream.CopyTo(memoryStream);
             var sessionOptions = new SessionOptions();
             sessionOptions.ExecutionMode = ExecutionMode.ORT_PARALLEL;
             session = new InferenceSession(memoryStream.ToArray(), sessionOptions);
-            embeddingsDict = new ConcurrentDictionary<Image<Rgb24>, float[]>();
         }
 
         ~ClassArcFace()
@@ -33,14 +26,10 @@ namespace ClassLibrary
         }
 
         public async Task<float[]> CalculateAllEmbeddingsAsync(Image<Rgb24> face, CancellationToken token)
-        {          
+        {
             return await Task<float[]>.Factory.StartNew(() =>
             {
                 token.ThrowIfCancellationRequested();
-                if (embeddingsDict.ContainsKey(face))
-                {
-                    return embeddingsDict[face];
-                }
                 var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("data", ImageToTensor(face)) };
                 IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results;
                 lock (session)
@@ -49,26 +38,17 @@ namespace ClassLibrary
                 }
                 token.ThrowIfCancellationRequested();
                 float[] embeddings = Normalize(results.First(v => v.Name == "fc1").AsEnumerable<float>().ToArray());
-                embeddingsDict.TryAdd(face, embeddings);
                 return embeddings;
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
-        public async Task<Tuple<float, float>> CalculateDistanceSimilarity(Image<Rgb24> face1, Image<Rgb24> face2)
+        public async Task<Tuple<float, float>> CalculateDistanceSimilarity(float[] embeddings1, float[] embeddings2)
         {
-            if(embeddingsDict.ContainsKey(face1) && embeddingsDict.ContainsKey(face2))
-            {
-                float[] embeddings1 = embeddingsDict[face1];
-                float[] embeddings2 = embeddingsDict[face2];
-                var dist = Distance(embeddings1, embeddings2);
-                var similarity = Similarity(embeddings1, embeddings2);
-                await dist;
-                await similarity;
-                return Tuple.Create(dist.Result, similarity.Result);
-            }
-
-            return Tuple.Create(float.NaN, float.NaN);
-
+            var dist = Distance(embeddings1, embeddings2);
+            var similarity = Similarity(embeddings1, embeddings2);
+            await dist;
+            await similarity;
+            return Tuple.Create(dist.Result, similarity.Result);
         }
 
         async Task<float> Distance(float[] v1, float[] v2)
