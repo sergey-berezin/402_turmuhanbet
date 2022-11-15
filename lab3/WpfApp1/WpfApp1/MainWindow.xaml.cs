@@ -14,7 +14,7 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using ClassLibrary1;
+using ClassLibrary;
 using System.Threading;
 using System.Collections;
 using System.IO;

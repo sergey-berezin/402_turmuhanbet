@@ -9,12 +9,13 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using System.Threading.Tasks.Dataflow;
 using System.Collections.Concurrent;
+// Download ONNX model from https://github.com/onnx/models/blob/main/vision/body_analysis/arcface/model/arcfaceresnet100-8.onnx
+// to project directory before run
 namespace ClassLibrary
 {
     public class ClassArcFace
     {
         private InferenceSession session;
-        public ConcurrentDictionary<Image<Rgb24>, float[]> embeddingsDict;
 
         public ClassArcFace()
         {
@@ -24,7 +25,6 @@ namespace ClassLibrary
             var sessionOptions = new SessionOptions();
             sessionOptions.ExecutionMode = ExecutionMode.ORT_PARALLEL;
             session = new InferenceSession(memoryStream.ToArray(), sessionOptions);
-            embeddingsDict = new ConcurrentDictionary<Image<Rgb24>, float[]>();
         }
 
         ~ClassArcFace()
@@ -33,14 +33,10 @@ namespace ClassLibrary
         }
 
         public async Task<float[]> CalculateAllEmbeddingsAsync(Image<Rgb24> face, CancellationToken token)
-        {          
+        {
             return await Task<float[]>.Factory.StartNew(() =>
             {
                 token.ThrowIfCancellationRequested();
-                if (embeddingsDict.ContainsKey(face))
-                {
-                    return embeddingsDict[face];
-                }
                 var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("data", ImageToTensor(face)) };
                 IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results;
                 lock (session)
@@ -49,26 +45,17 @@ namespace ClassLibrary
                 }
                 token.ThrowIfCancellationRequested();
                 float[] embeddings = Normalize(results.First(v => v.Name == "fc1").AsEnumerable<float>().ToArray());
-                embeddingsDict.TryAdd(face, embeddings);
                 return embeddings;
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
-        public async Task<Tuple<float, float>> CalculateDistanceSimilarity(Image<Rgb24> face1, Image<Rgb24> face2)
+        public async Task<Tuple<float, float>> CalculateDistanceSimilarity(float[] embeddings1, float[] embeddings2)
         {
-            if(embeddingsDict.ContainsKey(face1) && embeddingsDict.ContainsKey(face2))
-            {
-                float[] embeddings1 = embeddingsDict[face1];
-                float[] embeddings2 = embeddingsDict[face2];
-                var dist = Distance(embeddings1, embeddings2);
-                var similarity = Similarity(embeddings1, embeddings2);
-                await dist;
-                await similarity;
-                return Tuple.Create(dist.Result, similarity.Result);
-            }
-
-            return Tuple.Create(float.NaN, float.NaN);
-
+            var dist = Distance(embeddings1, embeddings2);
+            var similarity = Similarity(embeddings1, embeddings2);
+            await dist;
+            await similarity;
+            return Tuple.Create(dist.Result, similarity.Result);
         }
 
         async Task<float> Distance(float[] v1, float[] v2)
