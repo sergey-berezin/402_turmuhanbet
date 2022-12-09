@@ -253,7 +253,7 @@ namespace ImageClient
                             taskGetImage2 = await client.GetAsync($"{url}/{id2}");
                             requestCount++;
                         }
-                        if (taskGetImage1.StatusCode != System.Net.HttpStatusCode.OK)
+                        if (taskGetImage2.StatusCode != System.Net.HttpStatusCode.OK)
                         {
                             throw new Exception($"Не получается получить изображение по запросу \"{url}/{id2}\" в {requestCount} попытках");
                         }                   
