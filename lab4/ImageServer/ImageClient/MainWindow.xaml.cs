@@ -17,6 +17,8 @@ using ImageContracts;
 using System.Net.Http;
 using Newtonsoft.Json;
 using System.Text.Json;
+using Polly;
+using Polly.Retry;
 
 namespace ImageClient
 {
@@ -31,8 +33,8 @@ namespace ImageClient
         private CancellationToken token;
         private bool calculations_status;
         private Dictionary<byte[], int> id_image_dict;
-        private const int MaxRetries = 3;  
-
+        private const int MaxRetries = 3;
+        private readonly AsyncRetryPolicy _retryPolicy;
 
         public MainWindow()
         {
@@ -42,6 +44,8 @@ namespace ImageClient
             calculations_status = false;
             images_bytes_path = new List<Tuple<byte[], string>>();
             id_image_dict = new Dictionary<byte[], int>();
+            _retryPolicy = Policy.Handle<HttpRequestException>().WaitAndRetryAsync(MaxRetries, times =>
+                 TimeSpan.FromMilliseconds(Math.Exp(times) * 250));
         }
 
         //Метод загружает изображения с выбранного каталога и вызввает метод, который строит сетку
@@ -122,32 +126,24 @@ namespace ImageClient
         public async Task<int> CalculateImage(byte[] image, string path)
         {
             try
-            {          
+            {
                 DataStruct obj1 = new DataStruct(image, path);
                 var s = JsonConvert.SerializeObject(obj1);
                 var content = new StringContent(s);
                 content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-  
-                int requestCount = 0;
-                HttpClient client = new HttpClient();
-                var task1 = await client.PostAsync(url, content, token);
-                requestCount++;
-                while (requestCount < MaxRetries && task1.StatusCode != System.Net.HttpStatusCode.OK)
+                return await _retryPolicy.ExecuteAsync(async () =>
                 {
-                    task1 = await client.PostAsync(url, content, token);
-                    requestCount++;
-                }
-                if (task1.StatusCode != System.Net.HttpStatusCode.OK)
-                {
-                    throw new Exception($"Не получается добавить изображение в базу данных по запросу \"{url}\" в {requestCount} попытках");
-                }
-                var task1_result = JsonConvert.DeserializeObject<int>(task1.Content.ReadAsStringAsync().Result);
-                return task1_result;
+                    HttpClient client = new HttpClient();
+                    var task1 = await client.PostAsync(url, content, token);
+                    var task1_result = JsonConvert.DeserializeObject<int>(task1.Content.ReadAsStringAsync().Result);
+                    return task1_result;
+                });
             }
-            catch (OperationCanceledException e1)
+            catch (Exception ex)
             {
-                Console.WriteLine($"{nameof(OperationCanceledException)} thrown with message: {e1.Message}");
-                return -1;
+                MessageBox.Show(ex.Message);
+                //throw new OperationCanceledException(ex.Message);
+                throw new Exception($"Не получается отправить запрос по \"{url}\" в {MaxRetries} попытках");
             }
         }
 
@@ -211,8 +207,7 @@ namespace ImageClient
                     Console.WriteLine($"{nameof(OperationCanceledException)} thrown with message: {e2.Message}");
                 }
             }
-            HttpClient client = new HttpClient();
-            int requestCount = 0;
+
             for (int i = 0; i < images_bytes_path.Count; i++)
             {
                 for (int j = 0; j < images_bytes_path.Count; j++)
@@ -231,49 +226,70 @@ namespace ImageClient
                     {
                         int id1 = id_image_dict[images_bytes_path[i].Item1];
                         int id2 = id_image_dict[images_bytes_path[j].Item1];
-                        requestCount = 0;
-                        var taskGetImage1 = await client.GetAsync($"{url}/{id1}");
-                        requestCount++;
-                        while (requestCount < MaxRetries && taskGetImage1.StatusCode != System.Net.HttpStatusCode.OK)
+                        float[] embeddings1 = null;
+                        float[] embeddings2 = null;
+                        bool check1 = false;
+                        bool check2 = false;
+                       
+                        try
                         {
-                            taskGetImage1 = await client.GetAsync($"{url}/{id1}");
-                            requestCount++;
+                            await _retryPolicy.ExecuteAsync(async () =>
+                            {
+                                HttpClient client = new HttpClient();
+                                var taskGetImage1 = await client.GetAsync($"{url}/{id1}");
+                                if (taskGetImage1.IsSuccessStatusCode)
+                                {
+                                    var image1 = JsonConvert.DeserializeObject<ImageContracts.Image>(taskGetImage1.Content.ReadAsStringAsync().Result);
+                                    embeddings1 = new float[image1.Embedding.Length / 4];
+                                    for (int t = 0; t < image1.Embedding.Length / 4; t++)
+                                        embeddings1[t] = BitConverter.ToSingle(image1.Embedding, t * 4);
+                                    check1 = true;
+                                }                                  
+                            });
                         }
-                        if (taskGetImage1.StatusCode != System.Net.HttpStatusCode.OK)
+                        catch(Exception ex)
                         {
-                            throw new Exception($"Не получается получить изображение по запросу \"{url}/{id1}\" в {requestCount} попытках");
+                            MessageBox.Show(ex.Message);
+                            throw new Exception($"Не получается отправить запрос по \"{url}/{id1}\" в {MaxRetries} попытках");
                         }
-                        var image1 = JsonConvert.DeserializeObject<ImageContracts.Image>(taskGetImage1.Content.ReadAsStringAsync().Result);
 
-                        requestCount = 0;
-                        var taskGetImage2 = await client.GetAsync($"{url}/{id2}");
-                        requestCount++;
-                        while (requestCount < MaxRetries && taskGetImage2.StatusCode != System.Net.HttpStatusCode.OK)
+                        try
                         {
-                            taskGetImage2 = await client.GetAsync($"{url}/{id2}");
-                            requestCount++;
+                            await _retryPolicy.ExecuteAsync(async () =>
+                            {
+                                HttpClient client = new HttpClient();
+                                var taskGetImage2 = await client.GetAsync($"{url}/{id2}");
+                                if (taskGetImage2.IsSuccessStatusCode)
+                                {
+                                    var image2 = JsonConvert.DeserializeObject<ImageContracts.Image>(taskGetImage2.Content.ReadAsStringAsync().Result);
+                                    embeddings2 = new float[image2.Embedding.Length / 4];
+                                    for (int t = 0; t < image2.Embedding.Length / 4; t++)
+                                        embeddings2[t] = BitConverter.ToSingle(image2.Embedding, t * 4);
+                                    check2 = true;
+                                }                      
+                            });
                         }
-                        if (taskGetImage2.StatusCode != System.Net.HttpStatusCode.OK)
+                        catch (Exception ex)
                         {
-                            throw new Exception($"Не получается получить изображение по запросу \"{url}/{id2}\" в {requestCount} попытках");
-                        }                   
-                        var image2 = JsonConvert.DeserializeObject<ImageContracts.Image>(taskGetImage2.Content.ReadAsStringAsync().Result);
+                            MessageBox.Show(ex.Message);
+                            throw new Exception($"Не получается отправить запрос по \"{url}/{id2}\" в {MaxRetries} попытках");
+                        }
 
-                        float[] embeddings1 = new float[image1.Embedding.Length / 4];
-                        for (int t = 0; t < image1.Embedding.Length / 4; t++)
-                            embeddings1[t] = BitConverter.ToSingle(image1.Embedding, t * 4);
 
-                        float[] embeddings2 = new float[image2.Embedding.Length / 4];
-                        for (int t = 0; t < image2.Embedding.Length / 4; t++)
-                            embeddings2[t] = BitConverter.ToSingle(image2.Embedding, t * 4);
+                        if(check1 && check2)
+                        {
+                            var dist = Distance(embeddings1, embeddings2);
+                            var similarity = Similarity(embeddings1, embeddings2);
+                            await dist;
+                            await similarity;
 
-                        var dist = Distance(embeddings1, embeddings2);
-                        var similarity = Similarity(embeddings1, embeddings2);
-                        await dist;
-                        await similarity;
-
-                        l.Content = $"Distance: {dist.Result}\n Similarity: {similarity.Result}";
-                        pbStatus.Value += step2;
+                            l.Content = $"Distance: {dist.Result}\n Similarity: {similarity.Result}";
+                            pbStatus.Value += step2;
+                        }
+                        else
+                        {
+                            l.Content = $"Distance: Not calculated\n Similarity: Not calculated";
+                        }
                     }
                     table.Children.Add(l);
                 }
