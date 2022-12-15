@@ -77,9 +77,7 @@ namespace ImageClient
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message);
-                throw new Exception($"Не получается отправить запрос по \"{url}\" в {MaxRetries} попытках");
-            }        
-            
+            }                
         }
         private async void Button_Delete_Image(object sender, RoutedEventArgs e)
         {                    
@@ -108,7 +106,6 @@ namespace ImageClient
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message);
-                throw new Exception($"Не получается отправить запрос по \"{url}/{image.Id}\" в {MaxRetries} попытках");
             }
         }
     }

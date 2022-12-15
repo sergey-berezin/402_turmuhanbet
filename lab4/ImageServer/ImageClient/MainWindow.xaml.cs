@@ -202,9 +202,9 @@ namespace ImageClient
                         pbStatus.Value += step1;
                     }
                 }
-                catch (OperationCanceledException e2)
+                catch (Exception ex)
                 {
-                    Console.WriteLine($"{nameof(OperationCanceledException)} thrown with message: {e2.Message}");
+                    MessageBox.Show(ex.Message);
                 }
             }
 
@@ -248,9 +248,8 @@ namespace ImageClient
                             });
                         }
                         catch(Exception ex)
-                        {
+                        {                        
                             MessageBox.Show(ex.Message);
-                            throw new Exception($"Не получается отправить запрос по \"{url}/{id1}\" в {MaxRetries} попытках");
                         }
 
                         try
@@ -272,7 +271,6 @@ namespace ImageClient
                         catch (Exception ex)
                         {
                             MessageBox.Show(ex.Message);
-                            throw new Exception($"Не получается отправить запрос по \"{url}/{id2}\" в {MaxRetries} попытках");
                         }
 
 
