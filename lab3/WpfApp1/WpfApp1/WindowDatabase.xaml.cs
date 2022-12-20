@@ -15,7 +15,7 @@ using System.Collections;
 using System.Windows.Navigation;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using ClassLibrary1;     //подключили библиотеку классов из нашего пакета
+using ClassLibrary;     //подключили библиотеку классов из нашего пакета
 using System.Threading;
 using System.IO;
 using System.Collections.ObjectModel;
